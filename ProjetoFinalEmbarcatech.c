@@ -8,8 +8,8 @@
 #include "hardware/pwm.h"
 #include "hardware/adc.h"
 #include "hardware/i2c.h"
-
 #include "ssd1306.h"
+
 /*
  * Definindo pinos necessários
  *
@@ -40,7 +40,6 @@
 #define BUTTON_A_PIN 5
 #define DISPLAY_SDA 14
 #define DISPLAY_SCL 15
-#define SLEEPTIME 15
 
 /*
  * Inicializando variáveis globais
@@ -148,18 +147,19 @@ int main()
 	ssd1306_clear(&disp);
 
 	// Abertura do display (apenas estético)
-	/*
+	// Se você quiser evitar essa abertura estética do display toda vez que liga
+	// a placa, basta comentar o código a partir daqui:
 	for (int y = 0; y < 31; ++y) {
 		ssd1306_draw_line(&disp, 0, y, 127, y);
 		ssd1306_show(&disp);
-		sleep_ms(SLEEPTIME);
+		sleep_ms(15);
 		ssd1306_clear(&disp);
 	}
 	for (int y = 0, i = 1; y >= 0; y += i) {
 		ssd1306_draw_line(&disp, 0, 31 - y, 127, 31 + y);
 		ssd1306_draw_line(&disp, 0, 31 + y, 127, 31 - y);
 		ssd1306_show(&disp);
-		sleep_ms(SLEEPTIME);
+		sleep_ms(15);
 		ssd1306_clear(&disp);
 		if (y == 32) i = -1;
 	}
@@ -172,10 +172,12 @@ int main()
 	for (int y = 31; y < 63; ++y) {
 		ssd1306_draw_line(&disp, 0, y, 127, y);
 		ssd1306_show(&disp);
-		sleep_ms(SLEEPTIME);
+		sleep_ms(15);
 		ssd1306_clear(&disp);
 	}
-	*/
+	// Até aqui!!!
+	// A partir daqui, o código é necessário.
+
 	// Contador que nos informa quando a amostra de nosso ADC está pronta.
 	repeating_timer_t analog_timer;
 	add_repeating_timer_ms(5, analog_finish_callback, NULL, &analog_timer);
@@ -187,41 +189,41 @@ int main()
 	// Loop principal
 	while (true) {
 		if(analog_finish == true) {
-		// Realizando leitura do ADC e fazendo correções.
-		analog_read = adc_read();
+			// Realizando leitura do ADC e fazendo correções.
+			analog_read = adc_read();
 
-		// Convertendo o valor da leitura em graus (0 a 180).
-		position = (180.0*analog_read)/4095.0;
-		if(change_unit == true) {
-			// Se o botão A for apertado, mostra a referência de -90 a 90.
-			position = position - 90.0;
-		}
-		// Armazenando o valor da posição no ponteiro *info.
-		sprintf(buff, "%.1f", position);
-		*info = buff;
+			// Convertendo o valor da leitura em graus (0 a 180).
+			position = (180.0*analog_read)/4095.0;
+			if(change_unit == true) {
+				// Se o botão A for apertado, mostra a referência de -90 a 90.
+				position = position - 90.0;
+			}
+			// Armazenando o valor da posição no ponteiro *info.
+			sprintf(buff, "%.1f", position);
+			*info = buff;
 
-		// Convertendo nossa leitura analógica para "caber" no wrap do PWM.
-		conversion = (analog_read*scale) + compensation;
-		duty_cicle = (100.0*conversion/65535.0);
+			// Convertendo nossa leitura analógica para "caber" no wrap do PWM.
+			conversion = (analog_read*scale) + compensation;
+			duty_cicle = (100.0*conversion/65535.0);
 
-		// Configurando uma zona morta para nosso analógico.
-		if(conversion > 4800 && conversion < 5100) {
-			pwm_set_gpio_level(SERVO_PIN, 4916);
-		} else if(conversion < 1700) {
-			pwm_set_gpio_level(SERVO_PIN, 1638);
-			if(mute_buzzer == false)
-				pwm_set_gpio_level(BUZZER_A_PIN, 127);
-		} else if(conversion > 8100) {
-			pwm_set_gpio_level(SERVO_PIN, 8192);
-			if(mute_buzzer == false)
-				pwm_set_gpio_level(BUZZER_B_PIN, 127);
-		} else {
-			pwm_set_gpio_level(SERVO_PIN, conversion);
-			pwm_set_gpio_level(BUZZER_A_PIN, 0);
-			pwm_set_gpio_level(BUZZER_B_PIN, 0);
-		}
-		// Desativando a flag da interrupção.
-		analog_finish = false;
+			// Configurando uma zona morta para nosso analógico.
+			if(conversion > 4800 && conversion < 5100) {
+				pwm_set_gpio_level(SERVO_PIN, 4916);
+			} else if(conversion < 1700) {
+				pwm_set_gpio_level(SERVO_PIN, 1638);
+				if(mute_buzzer == false)
+					pwm_set_gpio_level(BUZZER_A_PIN, 127);
+			} else if(conversion > 8100) {
+				pwm_set_gpio_level(SERVO_PIN, 8192);
+				if(mute_buzzer == false)
+					pwm_set_gpio_level(BUZZER_B_PIN, 127);
+			} else {
+				pwm_set_gpio_level(SERVO_PIN, conversion);
+				pwm_set_gpio_level(BUZZER_A_PIN, 0);
+				pwm_set_gpio_level(BUZZER_B_PIN, 0);
+			}
+			// Desativando a flag da interrupção.
+			analog_finish = false;
 		}
 
 		if(print_ready == true) {
@@ -233,9 +235,13 @@ int main()
 			duty_cicle, analog_read, position);
 
 			// Gravação do display
+			// Caso o usuário queira uma atualização de display mais rápida, 
+			// basta colocar as 4 linhas de código abaixo no fim do 
+			// "if(analog_finish == true)", antes de "analog_finish = false;".
+			// Isso vai atualizar o display juntamente com a leitura do ADC!
 			ssd1306_draw_string(&disp, 8, 10, 2, "POSITION:");
 			ssd1306_draw_string(&disp, 8, 30, 2, info[0]);
-			ssd1306_show(&disp); 
+			ssd1306_show(&disp);
 			ssd1306_clear(&disp);
 
 			// Desativando a flag da interrupção
@@ -315,7 +321,7 @@ void start()
 
 /*
  * Rotina de tratamento de interrupção que nos avisa quando a amostra de
- * nosso ADC está pronta (a cada 10ms).
+ * nosso ADC está pronta (a cada 5ms).
  */
 bool analog_finish_callback(struct repeating_timer *t)
 {
@@ -326,7 +332,7 @@ bool analog_finish_callback(struct repeating_timer *t)
 /*
  * Rotina de tratamento de interrupção que evita com que seja mandado 
  * uma quantia enorme de mensagens na porta serial (USB) e no display
- * (a cada 800ms).
+ * (a cada 500ms).
  */
 bool print_ready_callback(struct repeating_timer *t)
 {
