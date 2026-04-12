@@ -49,9 +49,6 @@
  *
  * wrap_buzzer: Valor do wrap para o PWM dos buzzers.
  *
- * slice_buzzer: Variável declarada globalmente para nos permitir ativar e 
- * desativar os buzzers no fim de curso.
- *
  * analog_finish: Flag que indica quando a próxima amostra de nosso ADC está
  * pronta.
  *
@@ -71,8 +68,6 @@
  */
 uint16_t wrap_servo = 65535;
 uint8_t wrap_buzzer = 255;
-uint slice_buzzer_a;
-uint slice_buzzer_b;
 volatile bool analog_finish = false;
 volatile bool print_ready = false;
 volatile bool mute_buzzer = false;
@@ -127,6 +122,8 @@ int main()
 	 *
 	 * *words: Ponteiro com apenas umas palavras que são usadas na abertura do 
 	 * display (apenas frufru).
+	 * 
+	 * buff: buffer para armazenar o valor da leitura "position" no "*info".
 	 *
 	 * *info: Ponteiro do tipo char que guarda os valores da variável "position"
 	 * em um formato que possamos colocar no display.
@@ -181,11 +178,11 @@ int main()
 	*/
 	// Contador que nos informa quando a amostra de nosso ADC está pronta.
 	repeating_timer_t analog_timer;
-	add_repeating_timer_ms(10, analog_finish_callback, NULL, &analog_timer);
+	add_repeating_timer_ms(5, analog_finish_callback, NULL, &analog_timer);
 
 	// Contador que nos informa quando devemos printar algo na porta serial.
 	repeating_timer_t print_timer;
-	add_repeating_timer_ms(800, print_ready_callback, NULL, &print_timer);
+	add_repeating_timer_ms(500, print_ready_callback, NULL, &print_timer);
 
 	// Loop principal
 	while (true) {
@@ -213,15 +210,15 @@ int main()
 		} else if(conversion < 1700) {
 			pwm_set_gpio_level(SERVO_PIN, 1638);
 			if(mute_buzzer == false)
-			pwm_set_enabled(slice_buzzer_b, true);
+				pwm_set_gpio_level(BUZZER_A_PIN, 127);
 		} else if(conversion > 8100) {
 			pwm_set_gpio_level(SERVO_PIN, 8192);
 			if(mute_buzzer == false)
-			pwm_set_enabled(slice_buzzer_a, true);
+				pwm_set_gpio_level(BUZZER_B_PIN, 127);
 		} else {
 			pwm_set_gpio_level(SERVO_PIN, conversion);
-			pwm_set_enabled(slice_buzzer_a, false);
-			pwm_set_enabled(slice_buzzer_b, false);
+			pwm_set_gpio_level(BUZZER_A_PIN, 0);
+			pwm_set_gpio_level(BUZZER_B_PIN, 0);
 		}
 		// Desativando a flag da interrupção.
 		analog_finish = false;
@@ -238,13 +235,13 @@ int main()
 			// Gravação do display
 			ssd1306_draw_string(&disp, 8, 10, 2, "POSITION:");
 			ssd1306_draw_string(&disp, 8, 30, 2, info[0]);
-			ssd1306_show(&disp);
+			ssd1306_show(&disp); 
 			ssd1306_clear(&disp);
 
 			// Desativando a flag da interrupção
 			print_ready = false;
 		}
-	sleep_ms(5);
+	sleep_ms(2);
 	}
 }
 
@@ -256,8 +253,8 @@ void start()
 {
 	// Coletando os slices dos pinos de PWM.
 	uint slice_servo = pwm_gpio_to_slice_num(SERVO_PIN);
-	slice_buzzer_a = pwm_gpio_to_slice_num(BUZZER_A_PIN);
-	slice_buzzer_b = pwm_gpio_to_slice_num(BUZZER_B_PIN);
+	uint slice_buzzer_a = pwm_gpio_to_slice_num(BUZZER_A_PIN);
+	uint slice_buzzer_b = pwm_gpio_to_slice_num(BUZZER_B_PIN);
 
 	// Configurando os pinos para PWM.
 	gpio_set_function(SERVO_PIN, GPIO_FUNC_PWM);
@@ -266,22 +263,20 @@ void start()
 
 	// Ajustando o divisor e wrap dos PWMs.
 	pwm_set_clkdiv(slice_servo, 38.15);
-	pwm_set_clkdiv(slice_buzzer_a, 255.9375);
-	pwm_set_clkdiv(slice_buzzer_b, 255.9375);
+	pwm_set_clkdiv(slice_buzzer_a, 255.91);
+	pwm_set_clkdiv(slice_buzzer_b, 255.91);
 
 	pwm_set_wrap(slice_servo, wrap_servo);
 	pwm_set_wrap(slice_buzzer_a, wrap_buzzer);
 	pwm_set_wrap(slice_buzzer_b, wrap_buzzer);
 
-	// Inicializando o PWM com 0% de ciclo de trabalho.
+	// Inicializando o PWM e buzzers com 0% de ciclo de trabalho.
 	pwm_set_gpio_level(SERVO_PIN, 0);
 	pwm_set_enabled(slice_servo, true);
-
-	// Os buzzers só vão ativar quando solicitado no código.
-	pwm_set_gpio_level(BUZZER_A_PIN, 64);
-	pwm_set_enabled(slice_buzzer_a, false);
-	pwm_set_gpio_level(BUZZER_B_PIN, 64);
-	pwm_set_enabled(slice_buzzer_b, false);
+	pwm_set_gpio_level(BUZZER_A_PIN, 0);
+	pwm_set_enabled(slice_buzzer_a, true);
+	pwm_set_gpio_level(BUZZER_B_PIN, 0);
+	pwm_set_enabled(slice_buzzer_b, true);
 
 	// Inicializando ADC do joystick.
 	adc_init();
@@ -343,18 +338,18 @@ bool print_ready_callback(struct repeating_timer *t)
  * Rotina de tratamento de interrupção para os botões A e B. Dentro
  * da rotina de interrupção, temos um tratamento de debounce com um
  * temporizador. O tratamento da interrupção só vai acontecer quando
- * o último click do botão foi feito 50ms depois do click anterior,
+ * o último click do botão foi feito 100ms depois do click anterior,
  * evitando os "clicks fantasmas" causados pelo debounce.
  */
 void button_callback(uint gpio, uint32_t events) {
 	absolute_time_t now = get_absolute_time();
 	if(gpio == BUTTON_B_PIN) {
-		if (absolute_time_diff_us(last_request_time, now) > 50000) {
+		if (absolute_time_diff_us(last_request_time, now) > 100000) {
 		last_request_time = now;
 		mute_buzzer = !mute_buzzer;
 		}
 	} else if(gpio == BUTTON_A_PIN) {
-		if (absolute_time_diff_us(last_request_time, now) > 50000) {
+		if (absolute_time_diff_us(last_request_time, now) > 100000) {
 		last_request_time = now;
 		change_unit = !change_unit;
 		}
