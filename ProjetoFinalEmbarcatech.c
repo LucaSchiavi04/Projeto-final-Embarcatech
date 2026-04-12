@@ -23,14 +23,13 @@
  * virado para a esquerda, o buzzer A apita, e quando está para a direita, o buzzer
  * B apita.
  *
- * BUTTON_PIN: Duas entradas digitais para os botões A e B, o botão A diz a 
+ * BUTTON_PIN: três entradas digitais para os botões A e B, o botão A diz a 
  * referência de posição que queremos (-90 a 90 graus ou 0 a 180 graus). O botão 
  * B desativa/ativa os buzzers.
  *
  * DISPLAY: Pinos do display SSD1306 (I2C)
  *
  * SLEEPTIME: tempo de sleep em ms para o código de inicialização
- *
  */
 #define SERVO_PIN 8
 #define ANALOG_X_PIN 27
@@ -38,6 +37,7 @@
 #define BUZZER_A_PIN 21
 #define BUTTON_B_PIN 6
 #define BUTTON_A_PIN 5
+#define ANALOG_SW_PIN 22
 #define DISPLAY_SDA 14
 #define DISPLAY_SCL 15
 
@@ -71,6 +71,7 @@ volatile bool analog_finish = false;
 volatile bool print_ready = false;
 volatile bool mute_buzzer = false;
 volatile bool change_unit = false;
+volatile bool change_direction = false;
 static volatile absolute_time_t last_request_time;
 
 /*
@@ -192,6 +193,10 @@ int main()
 			// Realizando leitura do ADC e fazendo correções.
 			analog_read = adc_read();
 
+			// Se o botão do analógico foi pressionado, inverte o sentido do motor.
+			if(change_direction == true) {
+				analog_read = 4095 - analog_read;
+			}
 			// Convertendo o valor da leitura em graus (0 a 180).
 			position = (180.0*analog_read)/4095.0;
 			if(change_unit == true) {
@@ -279,8 +284,10 @@ void start()
 	// Inicializando o PWM e buzzers com 0% de ciclo de trabalho.
 	pwm_set_gpio_level(SERVO_PIN, 0);
 	pwm_set_enabled(slice_servo, true);
+
 	pwm_set_gpio_level(BUZZER_A_PIN, 0);
 	pwm_set_enabled(slice_buzzer_a, true);
+
 	pwm_set_gpio_level(BUZZER_B_PIN, 0);
 	pwm_set_enabled(slice_buzzer_b, true);
 
@@ -298,6 +305,10 @@ void start()
 	gpio_set_dir(BUTTON_B_PIN, GPIO_IN);
 	gpio_pull_up(BUTTON_B_PIN);
 
+	gpio_init(ANALOG_SW_PIN);
+	gpio_set_dir(ANALOG_SW_PIN, GPIO_IN);
+	gpio_pull_up(ANALOG_SW_PIN);
+
 	// Inicializando interrupções de botões.
 	gpio_set_irq_enabled_with_callback(
 		BUTTON_A_PIN,
@@ -307,6 +318,11 @@ void start()
 	);
 	gpio_set_irq_enabled(
 		BUTTON_B_PIN,
+		GPIO_IRQ_EDGE_FALL,
+		true
+	);
+	gpio_set_irq_enabled(
+		ANALOG_SW_PIN,
 		GPIO_IRQ_EDGE_FALL,
 		true
 	);
@@ -341,11 +357,11 @@ bool print_ready_callback(struct repeating_timer *t)
 }
 
 /*
- * Rotina de tratamento de interrupção para os botões A e B. Dentro
- * da rotina de interrupção, temos um tratamento de debounce com um
- * temporizador. O tratamento da interrupção só vai acontecer quando
- * o último click do botão foi feito 100ms depois do click anterior,
- * evitando os "clicks fantasmas" causados pelo debounce.
+ * Rotina de tratamento de interrupção para os botões A e B e o botão 
+ * do analógico. Dentro da rotina de interrupção, temos um tratamento 
+ * de debounce com um temporizador. O tratamento da interrupção só vai 
+ * acontecer quando o último click do botão foi feito 100ms depois do 
+ * click anterior, evitando os "clicks fantasmas" causados pelo debounce.
  */
 void button_callback(uint gpio, uint32_t events) {
 	absolute_time_t now = get_absolute_time();
@@ -358,6 +374,11 @@ void button_callback(uint gpio, uint32_t events) {
 		if (absolute_time_diff_us(last_request_time, now) > 100000) {
 		last_request_time = now;
 		change_unit = !change_unit;
+		}
+	} else if(gpio == ANALOG_SW_PIN) {
+		if (absolute_time_diff_us(last_request_time, now) > 100000) {
+		last_request_time = now;
+		change_direction = !change_direction;
 		}
 	}
 }
