@@ -66,7 +66,7 @@ O software implementa uma zona morta central e nas extremidades para evitar trep
 
 - Compile o código e pronto!
 
-# Exemplos:
+# Exemplos
 - Simulação no wokwi:
 https://wokwi.com/projects/461038225095903233
 
