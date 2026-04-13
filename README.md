@@ -38,7 +38,7 @@ O Botão B permite ativar ou desativar os alertas sonoros dos buzzers.
 | Componente | Pino | Função |
 | :--- | :--- | :--- |
 | Servo Motor | 8 | Saída PWM 50 Hz |
-| Joystick X | 27 | Entrada ADC  |
+| Joystick | 27 | Entrada ADC  |
 | Buzzer A | 21 | Alerta de fim de curso (Esquerda) |
 | Buzzer B | 10 | Alerta de fim de curso (Direita) |
 | Botão A | 5 | Alternar escala de unidade |
