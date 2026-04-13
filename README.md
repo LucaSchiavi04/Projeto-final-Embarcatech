@@ -1,4 +1,4 @@
-# Projeto-final-Embarcatech
+# Projeto Final Embarcatech
 Este projeto consiste em um sistema de controle de posição para um servo motor utilizando um joystick analógico, baseado no microcontrolador Raspberry Pi Pico. O sistema inclui feedback visual via display OLED, alertas sonoros e customização de exibição através de botões.
 
 # Funcionalidades
